@@ -328,18 +328,40 @@ function WireGuard:_pinEndpointRoute(raw, tracked, warnings)
         return
     end
 
-    local gw, gw_dev = self:getDefaultGateway()
-    if not (gw and gw_dev) then
-        table.insert(warnings, "No default route, endpoint exception not added")
+    local ok, out = exec("ip route get " .. endpoint_ip)
+    if not ok or not out then
+        table.insert(
+            warnings,
+            "Could not determine route to endpoint " .. endpoint_ip
+        )
         return
     end
 
-    local route = endpoint_ip .. " via " .. gw .. " dev " .. gw_dev
-    local ok, out = exec("ip route add " .. route)
-    if ok then
+    local dev = out:match("%sdev%s+(%S+)")
+    local via = out:match("%svia%s+(%S+)")
+
+    if not dev then
+        table.insert(
+            warnings,
+            "Could not determine interface for endpoint " .. endpoint_ip
+        )
+        return
+    end
+
+    local route
+
+    if via then
+        route = endpoint_ip .. " via " .. via .. " dev " .. dev
+    else
+        route = endpoint_ip .. " dev " .. dev
+    end
+
+    local rok, rout = exec("ip route add " .. route)
+
+    if rok then
         table.insert(tracked, route)
-    elseif not (out or ""):match("File exists") then
-        table.insert(warnings, "Endpoint route: " .. (out or ""))
+    elseif not (rout or ""):match("File exists") then
+        table.insert(warnings, "Endpoint route: " .. (rout or ""))
     end
 end
 
